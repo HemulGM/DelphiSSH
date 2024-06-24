@@ -12,45 +12,46 @@ unit Ssh2Client;
 }
 
 interface
+
 uses
-  WinApi.Windows,
-  WinApi.Winsock2,
-  System.SysUtils,
-  System.Classes,
-  SocketUtils,
+  WinApi.Windows, WinApi.Winsock2, System.SysUtils, System.Classes, SocketUtils,
   libssh2;
 
 type
   ESshError = class(Exception);
   // Used for user input (password entry, known host verification)
   // If Echo is False the response should be masked
-  TKeybInteractiveCallback = function(const AuthName, AuthInstruction, Prompt: string;
-    Echo: Boolean): string;
+
+  TKeybInteractiveCallback = function(const AuthName, AuthInstruction, Prompt: string; Echo: Boolean): string;
+
   TTransferProgressCallback = procedure(const AFileName: string; ATransfered, ATotal: UInt64);
 
   TAuthMethod = (amInteractive, amPassword, amKey, amHostBased);
+
   TAuthMethods = set of TAuthMethod;
 
   TSessionState = (session_Disconnected, session_Connected, session_Authorized);
 
   //KwonHost related
   TKnownHostCheckState = (khcsMatch, khcsMisMatch, khcsNotFound, khcsFailure);
+
   TKnownHostCheckAction = (khcaContinue, khcaStop, khcaAsk);
-  TKnownHostCheckPolicy = array [TKnownHostCheckState] of TKnownHostCheckAction;
+
+  TKnownHostCheckPolicy = array[TKnownHostCheckState] of TKnownHostCheckAction;
+
 var
   DefKnownHostCheckPolicy: TKnownHostCheckPolicy = (khcaContinue, khcaAsk, khcaAsk, khcaAsk);
 
 type
-  TFilePermission = (fpOtherExec, fpOtherWrite, fpOtherRead,
-                     fpGroupExec, fpGroupWrite, fpGroupRead,
-                     fpUserExec, fpUserWrite, fpUserRead);
+  TFilePermission = (fpOtherExec, fpOtherWrite, fpOtherRead, fpGroupExec, fpGroupWrite, fpGroupRead, fpUserExec, fpUserWrite, fpUserRead);
+
   TFilePermissions = set of TFilePermission;
 
 const
-   FPAllUser =  [fpUserRead, fpUserWrite, fpUserExec];
-   FPAllGroup = [fpGroupRead, fpGroupWrite, fpGroupExec];
-   FPAllOther = [fpOtherRead, fpOtherWrite, fpOtherExec];
-   FPDefault =  FPAllUser + [fpGroupRead, fpGroupExec, fpOtherRead, fpOtherExec];
+  FPAllUser =[fpUserRead, fpUserWrite, fpUserExec];
+  FPAllGroup =[fpGroupRead, fpGroupWrite, fpGroupExec];
+  FPAllOther =[fpOtherRead, fpOtherWrite, fpOtherExec];
+  FPDefault = FPAllUser + [fpGroupRead, fpGroupExec, fpOtherRead, fpOtherExec];
 
 type
   ILibSsh2 = interface
@@ -74,8 +75,7 @@ type
     procedure SetCodePage(const CP: Word);
     procedure SetKeybInteractiveCallback(Callback: TKeybInteractiveCallback);
     procedure ConfigKeepAlive(WantServerReplies: Boolean; IntervalInSecs: Cardinal);
-    procedure ConfigKnownHostCheckPolicy(EnableCheck: Boolean;
-      const Policy: TKnownHostCheckPolicy; const KnownHostsFile: string = '');
+    procedure ConfigKnownHostCheckPolicy(EnableCheck: Boolean; const Policy: TKnownHostCheckPolicy; const KnownHostsFile: string = '');
     procedure Connect(IPVersion: TIPVersion = IPv4);
     procedure Disconnect;
     function AuthMethods(UserName: string): TAuthMethods;
@@ -117,12 +117,8 @@ type
     procedure Cancel;
     procedure Receive(const RemoteFile: string; Stream: TStream); overload;
     procedure Receive(const RemoteFile, LocalFile: string); overload;
-    procedure Send(Stream: TStream; const RemoteFile: string;
-      Permissions: TFilePermissions = FPDefault;
-      MTime: TDateTime = 0; ATime: TDateTime = 0); overload;
-    procedure Send(const LocalFile, RemoteFile: string;
-      Permissions: TFilePermissions = FPDefault;
-      MTime: TDateTime = 0; ATime: TDateTime = 0); overload;
+    procedure Send(Stream: TStream; const RemoteFile: string; Permissions: TFilePermissions = FPDefault; MTime: TDateTime = 0; ATime: TDateTime = 0); overload;
+    procedure Send(const LocalFile, RemoteFile: string; Permissions: TFilePermissions = FPDefault; MTime: TDateTime = 0; ATime: TDateTime = 0); overload;
     property BufferSize: Int64 write SetBufferSize;
   end;
 
@@ -137,13 +133,18 @@ type
 
 // Factory functions
 function GetLibSsh2: ILibSsh2;
+
 function CreateSession(Host: string; Port: Word = 22): ISshSession;
+
 function CreateScp(Session: ISshSession): IScp;
+
 function CreateSshExec(Session: ISshSession): ISshExec;
 
 // support routines
 function AnsiToUnicode(P: PAnsiChar; CP: Word): string; overload;
+
 function AnsiToUnicode(P: PAnsiChar; Len: Int64; CP: Word): string; overload;
+
 procedure CheckLibSsh2Result(ResultCode: Integer; Session: ISshSession; const Op: string);
 
 var
@@ -153,9 +154,7 @@ var
 implementation
 
 uses
-  System.Math,
-  System.AnsiStrings,
-  System.DateUtils;
+  System.Math, System.AnsiStrings, System.DateUtils;
 
 {$region 'Support stuff'}
 resourcestring
@@ -169,21 +168,23 @@ resourcestring
   Msg_PrivateKeyInstruction = 'Private key password for "%s"';
 
 function AnsiToUnicode(P: PAnsiChar; CP: Word): string;
-Var
+var
   S: RawByteString;
 begin
-  if P = nil then Exit('');
+  if P = nil then
+    Exit('');
 
-  S:= P;
+  S := P;
   SetCodePage(S, CP, False);
   Result := string(S);
 end;
 
 function AnsiToUnicode(P: PAnsiChar; Len: Int64; CP: Word): string;
-Var
+var
   S: RawByteString;
 begin
-  if P = nil then Exit('');
+  if P = nil then
+    Exit('');
 
   SetString(S, P, Len);
   SetCodePage(S, CP, False);
@@ -201,21 +202,23 @@ begin
     if Session <> nil then
     begin
       // LIBSSH2_ERROR_EAGAIN indicates no result in non-blocking mode
-      if ResultCode = LIBSSH2_ERROR_EAGAIN then Exit;
+      if ResultCode = LIBSSH2_ERROR_EAGAIN then
+        Exit;
       libssh2_session_last_error(Session.Addr, P, I, 0);
       ErrMsg := AnsiToUnicode(P, I, Session.CodePage);
     end;
-    raise ESshError.CreateResFmt(@Err_LibSsh2,
-      [ErrMsg, ResultCode, Op])
+    raise ESshError.CreateResFmt(@Err_LibSsh2, [ErrMsg, ResultCode, Op])
   end;
 end;
 {$endregion}
 
 {$region 'TLibSSh2'}
+
 type
-  TLibSSh2  = class(TInterfacedObject, ILibSsh2)
+  TLibSSh2 = class(TInterfacedObject, ILibSsh2)
   private
-    class var FInstanceCount: Integer;
+    class var
+      FInstanceCount: Integer;
     function GetVersion: string;
   public
     constructor Create;
@@ -245,6 +248,7 @@ end;
 {$endregion}
 
 {$region 'TSshSession'}
+
 type
   TKnownHostCheckSettings = record
     EnableCheck: Boolean;
@@ -281,8 +285,7 @@ type
     procedure SetCodePage(const CP: Word);
     procedure SetKeybInteractiveCallback(Callback: TKeybInteractiveCallback);
     procedure ConfigKeepAlive(WantServerReplies: Boolean; IntervalInSecs: Cardinal);
-    procedure ConfigKnownHostCheckPolicy(EnableCheck: Boolean;
-      const Policy: TKnownHostCheckPolicy; const KnownHostsFile: string = '');
+    procedure ConfigKnownHostCheckPolicy(EnableCheck: Boolean; const Policy: TKnownHostCheckPolicy; const KnownHostsFile: string = '');
     procedure Connect(IPVersion: TIPVersion = IPv4);
     procedure CheckKnownHost;
     function AuthMethods(UserName: string): TAuthMethods;
@@ -307,14 +310,14 @@ type
 {       Memory                                          }
 { ----------------------------------------------------- }
 
-function  malloc(size: size_t; abstract: PPointer): Pointer; cdecl;
+function malloc(size: size_t; abstract: PPointer): Pointer; cdecl;
 begin
   Result := AllocMem(size);
 end;
 
 function realloc(P: Pointer; NewSize: size_t; abstract: PPointer): Pointer; cdecl;
 begin
-  ReallocMem(P, Newsize);
+  ReallocMem(P, NewSize);
   Result := P;
 end;
 
@@ -326,7 +329,7 @@ end;
 { TSshSession }
 
 procedure TSshSession.CheckKnownHost;
-Var
+var
   KnownHosts: PLIBSSH2_KNOWNHOSTS;
   ReturnCode: integer;
   M: TMarshaller;
@@ -345,22 +348,23 @@ Var
     begin
       if not Assigned(FKeybIntEvent) then
         Action := khcaStop
-      else begin
+      else
+      begin
         if FKeybIntEvent('', Format(Err_SessionUnKnownHost, [FHost]),
           UnKnownHostPrompt, True) = 'yes'
-        then
+          then
           Action := khcaContinue
         else
           Action := khcaStop;
       end;
     end;
-    if (Action = khcaContinue) and Assigned(KnownHosts) and Assigned(Fingerprint) then
+    if (Action = khcaContinue) and Assigned(KnownHosts) and Assigned(FingerPrint) then
     begin
       if libssh2_knownhost_addc(KnownHosts, M.AsAnsi(FHost, FCodePage).ToPointer, nil, FingerPrint,
-        Keylen, nil, 0, LIBSSH2_KNOWNHOST_TYPE_PLAIN or LIBSSH2_KNOWNHOST_KEYENC_RAW
+        KeyLen, nil, 0, LIBSSH2_KNOWNHOST_TYPE_PLAIN or LIBSSH2_KNOWNHOST_KEYENC_RAW
         //  LIBSSH2_HOSTKEY_TYPE_ -> LIBSSH2_KNOWNHOST_KEY_
-        or (Succ(typ) shl LIBSSH2_KNOWNHOST_KEY_SHIFT), HostResult) = 0
-      then
+          or (Succ(Typ) shl LIBSSH2_KNOWNHOST_KEY_SHIFT), HostResult) = 0
+        then
         libssh2_knownhost_writefile(KnownHosts,
           M.AsAnsi(FKnownHostCheckSettings.KnownHostsFile, FCodePage).ToPointer,
           LIBSSH2_KNOWNHOST_FILE_OPENSSH);
@@ -384,7 +388,7 @@ begin
       FileClose(Handle);
   end;
 
-  Fingerprint := libssh2_session_hostkey(FAddr, KeyLen, Typ);
+  FingerPrint := libssh2_session_hostkey(FAddr, KeyLen, Typ);
   if FingerPrint = nil then
   begin
     HandleState(khcsFailure);
@@ -410,31 +414,28 @@ begin
       Exit;
 
     ReturnCode := libssh2_knownhost_checkp(KnownHosts, M.AsAnsi(FHost, FCodePage).ToPointer,
-      FPort, Fingerprint, KeyLen, LIBSSH2_KNOWNHOST_TYPE_PLAIN or
+      FPort, FingerPrint, KeyLen, LIBSSH2_KNOWNHOST_TYPE_PLAIN or
       LIBSSH2_KNOWNHOST_KEYENC_RAW, HostResult);
 
     if ReturnCode <> LIBSSH2_KNOWNHOST_CHECK_MATCH then
       HandleState(TKnownHostCheckState(ReturnCode));
-
   finally
     libssh2_knownhost_free(KnownHosts);
   end;
 end;
 
-procedure TSshSession.ConfigKeepAlive(WantServerReplies: Boolean;
-  IntervalInSecs: Cardinal);
+procedure TSshSession.ConfigKeepAlive(WantServerReplies: Boolean; IntervalInSecs: Cardinal);
 {Note that non-blocking applications are responsible for sending the
 keepalive messages using libssh2_keepalive_sendbegin}
 begin
   libssh2_keepalive_config(FAddr, IfThen(WantServerReplies, 1, 0), IntervalInSecs);
 end;
 
-procedure TSshSession.ConfigKnownHostCheckPolicy(EnableCheck: Boolean;
-  const Policy: TKnownHostCheckPolicy; const KnownHostsFile: string);
+procedure TSshSession.ConfigKnownHostCheckPolicy(EnableCheck: Boolean; const Policy: TKnownHostCheckPolicy; const KnownHostsFile: string);
 begin
   FKnownHostCheckSettings.EnableCheck := EnableCheck;
   if KnownHostsFile <> '' then
-    FKnownHostCheckSettings.KnownHostsFile :=  KnownHostsFile;
+    FKnownHostCheckSettings.KnownHostsFile := KnownHostsFile;
   FKnownHostCheckSettings.Policy := Policy;
 end;
 
@@ -462,16 +463,17 @@ begin
   SetTimeout(gDefaultSshTimeout);
 
   if FKnownHostCheckSettings.EnableCheck then
-    try
-      CheckKnownHost;
-    except
-      Disconnect;
-      raise
-    end;
+  try
+    CheckKnownHost;
+  except
+    Disconnect;
+    raise
+  end;
 end;
 
 constructor TSshSession.Create(Host: string; Port: Word);
-  function ExpandEnvStrings(const AString: String): String;
+
+  function ExpandEnvStrings(const AString: string): string;
   var
     bufsize: Integer;
   begin
@@ -480,6 +482,7 @@ constructor TSshSession.Create(Host: string; Port: Word);
     ExpandEnvironmentStrings(PChar(AString), PChar(result), bufsize);
     result := TrimRight(result);
   end;
+
 begin
   inherited Create;
   FKnownHostCheckSettings.EnableCheck := True;
@@ -534,7 +537,7 @@ begin
 end;
 
 function TSshSession.GetHostBanner: string;
-Var
+var
   S: RawByteString;
 begin
   S := libssh2_session_banner_get(FAddr);
@@ -548,7 +551,7 @@ begin
   if FAddr <> nil then
     Result := Format('KEX: %s, CRYPT: %s, MAC: %s, COMP: %s, LANG: %s',
       [libssh2_session_methods(FAddr, LIBSSH2_METHOD_KEX), libssh2_session_methods(FAddr,
-        LIBSSH2_METHOD_CRYPT_CS), libssh2_session_methods(FAddr, LIBSSH2_METHOD_MAC_CS),
+      LIBSSH2_METHOD_CRYPT_CS), libssh2_session_methods(FAddr, LIBSSH2_METHOD_MAC_CS),
       libssh2_session_methods(FAddr, LIBSSH2_METHOD_COMP_CS) + ' ' +
       libssh2_session_methods(FAddr, LIBSSH2_METHOD_COMP_SC),
       libssh2_session_methods(FAddr, LIBSSH2_METHOD_LANG_CS)]);
@@ -556,7 +559,7 @@ end;
 
 function TSshSession.GetSessionState: TSessionState;
 begin
-   Result := FState;
+  Result := FState;
 end;
 
 function TSshSession.GetSocket: TSocket;
@@ -600,17 +603,22 @@ var
   PList: PAnsiChar;
   List: string;
 begin
-  if FAuthMethodsCached then Exit(FAuthMethods);
+  if FAuthMethodsCached then
+    Exit(FAuthMethods);
 
   FAuthMethods := [];
   PList := libssh2_userauth_list(FAddr, M.AsAnsi(UserName, FCodePage).ToPointer, Length(UserName));
   if Assigned(PList) then
   begin
     List := AnsiToUnicode(PList, FCodePage);
-    if Pos('password', List) > 0 then Include(FAuthMethods, amPassword);
-    if Pos('publickey', List) > 0 then Include(FAuthMethods, amKey);
-    if Pos('keyboard-interactive', List) > 0 then Include(FAuthMethods, amInteractive);
-    if Pos('hostbased', List) > 0 then Include(FAuthMethods, amHostBased);
+    if Pos('password', List) > 0 then
+      Include(FAuthMethods, amPassword);
+    if Pos('publickey', List) > 0 then
+      Include(FAuthMethods, amKey);
+    if Pos('keyboard-interactive', List) > 0 then
+      Include(FAuthMethods, amInteractive);
+    if Pos('hostbased', List) > 0 then
+      Include(FAuthMethods, amHostBased);
   end
   else if libssh2_userauth_authenticated(FAddr) <> 0 then
     // Unlikely but SSH_USERAUTH_NONE succeded!
@@ -618,39 +626,37 @@ begin
   Result := FAuthMethods;
 end;
 
-procedure KbdInteractiveCallback(const Name: PAnsiChar; name_len: Integer;
-  const instruction: PAnsiChar; instruction_len: Integer; num_prompts: Integer;
-  const prompts: PLIBSSH2_USERAUTH_KBDINT_PROMPT;
-  responses: PLIBSSH2_USERAUTH_KBDINT_RESPONSE;
-    _abstract: PPointer); cdecl;
+procedure KbdInteractiveCallback(const Name: PAnsiChar; name_len: Integer; const instruction: PAnsiChar; instruction_len: Integer; num_prompts: Integer; const prompts: PLIBSSH2_USERAUTH_KBDINT_PROMPT; responses: PLIBSSH2_USERAUTH_KBDINT_RESPONSE; _abstract: PPointer); cdecl;
 var
   Session: TSshSession;
-  SName, SInstruction, SPrompt : RawByteString;
+  SName, SInstruction, SPrompt: RawByteString;
   PromptNo: Integer;
   Echo: Boolean;
   P: Pointer;
   Response: string;
   M: TMarshaller;
 begin
-  if _abstract = nil then Exit;
+  if _abstract = nil then
+    Exit;
   Session := TSshSession(_abstract^);
-  if not Assigned(Session.FKeybIntEvent) then Exit;
+  if not Assigned(Session.FKeybIntEvent) then
+    Exit;
 
   SetString(SName, Name, name_len);
   SetCodePage(SName, Session.FCodePage, False);
-  SetString(SInstruction, Instruction, instruction_len);
+  SetString(SInstruction, instruction, instruction_len);
   SetCodePage(SInstruction, Session.FCodePage, False);
   {$POINTERMATH ON}
   for PromptNo := 0 to num_prompts - 1 do
   begin
     Echo := prompts[PromptNo].Echo <> 0;
     SetString(SPrompt, prompts[PromptNo].text, prompts[PromptNo].length);
-    Response :=Session.FKeybIntEvent(
+    Response := Session.FKeybIntEvent(
       string(SName), string(SInstruction), string(SPrompt), Echo);
     if Response <> '' then
     begin
       // libssh2 will be freeing the allocated memory!!
-      P := AllocMem(Length(Response)+1);
+      P := AllocMem(Length(Response) + 1);
       System.AnsiStrings.StrCopy(PAnsiChar(P),
         PAnsiChar(M.AsAnsi(Response, Session.FCodePage).ToPointer));
       responses[PromptNo].text := P;
@@ -662,16 +668,20 @@ end;
 
 function TSshSession.UserAuth(const UserName: string): Boolean;
 begin
-  if FState = session_Authorized then Exit(True);
-  if FState <> session_Connected then Exit(False);
+  if FState = session_Authorized then
+    Exit(True);
+  if FState <> session_Connected then
+    Exit(False);
 
   // Also sets FAuthMethods
-  if UserAuthNone(UserName) then Exit(True);
-  if (amKey in FAuthMethods) and UserAuthAgent(UserName) then Exit(True);
+  if UserAuthNone(UserName) then
+    Exit(True);
+  if (amKey in FAuthMethods) and UserAuthAgent(UserName) then
+    Exit(True);
   // UserAuthInteractive also tries password authorization
   if (FAuthMethods * [amInteractive, amPassword] <> [])
     and UserAuthInteractive(UserName)
-  then
+    then
     Exit(True)
   else
     Exit(False);
@@ -679,12 +689,14 @@ end;
 
 function TSshSession.UserAuthNone(const UserName: string): Boolean;
 begin
-  if FState = session_Authorized then Exit(True);
-  if FState <> session_Connected then Exit(False);
+  if FState = session_Authorized then
+    Exit(True);
+  if FState <> session_Connected then
+    Exit(False);
 
   FAuthMethods := AuthMethods(UserName);
   Result := FState = session_Authorized;
-  if Result  then
+  if Result then
     FUserName := UserName;
 end;
 
@@ -699,12 +711,15 @@ var
   ReturnCode: integer;
   M: TMarshaller;
 begin
-  if FState = session_Authorized then Exit(True);
-  if (FState <> session_Connected) or not (amKey in AuthMethods(UserName)) then Exit(False);
+  if FState = session_Authorized then
+    Exit(True);
+  if (FState <> session_Connected) or not (amKey in AuthMethods(UserName)) then
+    Exit(False);
 
   Result := False;
   Agent := libssh2_agent_init(FAddr);
-  if not Assigned(Agent) then Exit(False);
+  if not Assigned(Agent) then
+    Exit(False);
 
   ReturnCode := libssh2_agent_connect(Agent);
   if ReturnCode = 0 then
@@ -746,11 +761,12 @@ function TSshSession.UserAuthInteractive(const UserName: string): Boolean;
   For some reason libssh2_userauth_keyboard_interactive does not work
   with Windows Hosts.  Do a libssh2_userauth_password instead if possible.
 }
-Var
+var
   UName: TMarshaller;
   Methods: TAuthMethods;
 begin
-  if FState = session_Authorized then Exit(True);
+  if FState = session_Authorized then
+    Exit(True);
   if (FState <> session_Connected) or not Assigned(FKeybIntEvent) then
     Exit(False);
 
@@ -758,8 +774,8 @@ begin
   if (amInteractive in Methods) and not GetWindowsHost then
     Result :=
       libssh2_userauth_keyboard_interactive(FAddr,
-         UName.AsAnsi(UserName, FCodePage).ToPointer,
-         KbdInteractiveCallback) = 0
+      UName.AsAnsi(UserName, FCodePage).ToPointer,
+      KbdInteractiveCallback) = 0
   else if amPassword in Methods then
     Result := UserAuthPass(UserName, FKeybIntEvent('', '', Msg_Password, False))
   else
@@ -771,13 +787,14 @@ begin
   end;
 end;
 
-function TSshSession.UserAuthKey(const UserName: string; PrivateKeyFile,
-  PassPhrase: string): Boolean;
-Var
+function TSshSession.UserAuthKey(const UserName: string; PrivateKeyFile, PassPhrase: string): Boolean;
+var
   M: TMarshaller;
 begin
-  if FState = session_Authorized then Exit(True);
-  if FState <> session_Connected then Exit(False);
+  if FState = session_Authorized then
+    Exit(True);
+  if FState <> session_Connected then
+    Exit(False);
 
   if amKey in AuthMethods(UserName) then
     Result := libssh2_userauth_publickey_fromfile(FAddr,
@@ -794,29 +811,32 @@ begin
   end;
 end;
 
-function TSshSession.UserAuthKey(const UserName: string;
-  PrivateKeyFile: string): Boolean;
+function TSshSession.UserAuthKey(const UserName: string; PrivateKeyFile: string): Boolean;
 begin
-  if FState = session_Authorized then Exit(True);
-  if not Assigned(FKeybIntEvent) or not (amKey in AuthMethods(UserName)) then Exit(False);
+  if FState = session_Authorized then
+    Exit(True);
+  if not Assigned(FKeybIntEvent) or not (amKey in AuthMethods(UserName)) then
+    Exit(False);
 
   Result := UserAuthKey(UserName, PrivateKeyFile,
-      FKeybIntEvent('', Format(Msg_PrivateKeyInstruction, [PrivateKeyFile]),
-      Msg_Password, False));
+    FKeybIntEvent('', Format(Msg_PrivateKeyInstruction, [PrivateKeyFile]),
+    Msg_Password, False));
 end;
 
 function TSshSession.UserAuthPass(const UserName, Password: string): Boolean;
-Var
+var
   M: TMarshaller;
 begin
-  if FState = session_Authorized then Exit(True);
-  if FState <> session_Connected then Exit(False);
+  if FState = session_Authorized then
+    Exit(True);
+  if FState <> session_Connected then
+    Exit(False);
 
   Result :=
     (amPassword in AuthMethods(UserName)) and
     (libssh2_userauth_password(FAddr,
-       M.AsAnsi(UserName, FCodePage).ToPointer,
-       M.AsAnsi(PassWord, FCodePage).ToPointer) = 0);
+    M.AsAnsi(UserName, FCodePage).ToPointer,
+    M.AsAnsi(Password, FCodePage).ToPointer) = 0);
   if Result then
   begin
     FState := session_Authorized;
@@ -838,18 +858,14 @@ type
     FBufferSize: Int64;
     FCancelled: Boolean;
     FTransferCallback: TTransferProgressCallback;
-    FSession : ISshSession;
-    procedure SetBufferSize(Size: Int64);
+    FSession: ISshSession;
+    procedure SetBufferSize(size: Int64);
     procedure SetTransferProgressCallback(Callback: TTransferProgressCallback);
     procedure Cancel;
     procedure Receive(const RemoteFile: string; Stream: TStream); overload;
     procedure Receive(const RemoteFile, LocalFile: string); overload;
-    procedure Send(Stream: TStream; const RemoteFile: string;
-      Permissions: TFilePermissions = FPDefault;
-      MTime: TDateTime = 0; ATime: TDateTime = 0); overload;
-    procedure Send(const LocalFile, RemoteFile: string;
-      Permissions: TFilePermissions = FPDefault;
-      MTime: TDateTime = 0; ATime: TDateTime = 0); overload;
+    procedure Send(Stream: TStream; const RemoteFile: string; Permissions: TFilePermissions = FPDefault; MTime: TDateTime = 0; ATime: TDateTime = 0); overload;
+    procedure Send(const LocalFile, RemoteFile: string; Permissions: TFilePermissions = FPDefault; MTime: TDateTime = 0; ATime: TDateTime = 0); overload;
   public
     constructor Create(Session: ISshSession);
   end;
@@ -869,7 +885,7 @@ begin
 end;
 
 procedure TScp.Receive(const RemoteFile, LocalFile: string);
-Var
+var
   FileStream: TFileStream;
 begin
   FileStream := TFileStream.Create(LocalFile, fmCreate or fmOpenWrite);
@@ -885,12 +901,12 @@ procedure TScp.Receive(const RemoteFile: string; Stream: TStream);
 var
   Channel: PLIBSSH2_CHANNEL;
   Buffer: TBytes;
-  M : TMarshaller;
+  M: TMarshaller;
   Stat: struct_stat;
   TotalBytesRead: ssize_t;
   BytesRead: ssize_t;
 begin
-  if FSession.SessionState <>  session_Authorized then
+  if FSession.SessionState <> session_Authorized then
     raise ESshError.CreateRes(@Err_SessionAuth);
 
   FCancelled := False;
@@ -900,13 +916,16 @@ begin
   try
     SetLength(Buffer, FBufferSize);
     TotalBytesRead := 0;
-    while TotalBytesRead < Stat.st_size do begin
-      if FCancelled then Break;
-      BytesRead := libssh2_channel_read(channel, PAnsiChar(Buffer), FBufferSize);
+    while TotalBytesRead < Stat.st_size do
+    begin
+      if FCancelled then
+        Break;
+      BytesRead := libssh2_channel_read(Channel, PAnsiChar(Buffer), FBufferSize);
       if BytesRead < 0 then
         CheckLibSsh2Result(BytesRead, FSession, 'libssh2_channel_read');
       Inc(TotalBytesRead, BytesRead);
-      if TotalBytesRead > Stat.St_Size then Dec(BytesRead);  // The last byte is #0
+      if TotalBytesRead > Stat.St_Size then
+        Dec(BytesRead);  // The last byte is #0
       Stream.Write(Buffer, BytesRead);
       if Assigned(FTransferCallback) then
         FTransferCallback(RemoteFile, TotalBytesRead, Stat.st_size);
@@ -916,8 +935,7 @@ begin
   end;
 end;
 
-procedure TScp.Send(Stream: TStream; const RemoteFile: string;
-  Permissions: TFilePermissions; MTime: TDateTime; ATime: TDateTime);
+procedure TScp.Send(Stream: TStream; const RemoteFile: string; Permissions: TFilePermissions; MTime: TDateTime; ATime: TDateTime);
 var
   Channel: PLIBSSH2_CHANNEL;
   M: TMarshaller;
@@ -926,7 +944,7 @@ var
   Buf: PAnsiChar;
   Transfered: UInt64;
 begin
-  if FSession.SessionState <>  session_Authorized then
+  if FSession.SessionState <> session_Authorized then
     raise ESshError.CreateRes(@Err_SessionAuth);
   //
   FCancelled := False;
@@ -949,7 +967,8 @@ begin
         repeat
           R := libssh2_channel_write(Channel, Buf, K);
           if R < 0 then
-            CheckLibSsh2Result(R, FSession, 'libssh2_channel_write');;
+            CheckLibSsh2Result(R, FSession, 'libssh2_channel_write');
+          ;
           Inc(Transfered, R);
           Inc(Buf, R);
           Dec(K, R);
@@ -966,9 +985,8 @@ begin
   end;
 end;
 
-procedure TScp.Send(const LocalFile, RemoteFile: string;
-  Permissions: TFilePermissions; MTime: TDateTime; ATime: TDateTime);
-Var
+procedure TScp.Send(const LocalFile, RemoteFile: string; Permissions: TFilePermissions; MTime: TDateTime; ATime: TDateTime);
+var
   FileStream: TFileStream;
 begin
   FileStream := TFileStream.Create(LocalFile, fmOpenRead);
@@ -991,13 +1009,14 @@ end;
 {$endregion}
 
 {$region 'TSshExec'}
+
 type
   TSshExec = class(TInterfacedObject, ISshExec)
   private
-    FSession : ISshSession;
+    FSession: ISshSession;
     FBufferSize: Int64;
     FCancelled: Boolean;
-    procedure SetBufferSize(Size: Int64);
+    procedure SetBufferSize(size: Int64);
     procedure Cancel;
     procedure Exec(const Command: string; var Output, ErrOutput: string; var ExitCode: Integer);
   public
@@ -1018,22 +1037,22 @@ begin
   FBufferSize := 8 * 1024 - 1;
 end;
 
-function ReadStringFromChannel(Session: ISshSession; Channel: PLIBSSH2_CHANNEL;
-  Buf: PAnsiChar; BufLen: size_t; StreamId: Integer; Cancelled: PBoolean): string;
-Var
-  MemoryStream : TMemoryStream;
+function ReadStringFromChannel(Session: ISshSession; Channel: PLIBSSH2_CHANNEL; Buf: PAnsiChar; BufLen: size_t; StreamId: Integer; Cancelled: PBoolean): string;
+var
+  MemoryStream: TMemoryStream;
   BytesRead: ssize_t;
 begin
   Result := '';
-  if Cancelled^ then Exit;
+  if Cancelled^ then
+    Exit;
   MemoryStream := TMemoryStream.Create;
   try
-    Repeat
-      BytesRead :=  libssh2_channel_read_ex(Channel, StreamId, Buf, BufLen);
+    repeat
+      BytesRead := libssh2_channel_read_ex(Channel, StreamId, Buf, BufLen);
       CheckLibSsh2Result(BytesRead, Session, 'libssh2_channel_read_ex');
       if BytesRead > 0 then
         MemoryStream.Write(Buf^, BytesRead);
-    Until (BytesRead = 0) or Cancelled^;
+    until (BytesRead = 0) or Cancelled^;
 
     if MemoryStream.Size > 0 then
       Result := AnsiToUnicode(PAnsiChar(MemoryStream.Memory),
@@ -1043,8 +1062,7 @@ begin
   end;
 end;
 
-procedure TSshExec.Exec(const Command: string; var Output, ErrOutput: string;
-  var ExitCode: Integer);
+procedure TSshExec.Exec(const Command: string; var Output, ErrOutput: string; var ExitCode: Integer);
 var
   Channel: PLIBSSH2_CHANNEL;
   M: TMarshaller;
@@ -1053,14 +1071,14 @@ var
   ReadFds: TFdSet;
   ReturnCode: integer;
 begin
-  if FSession.SessionState <>  session_Authorized then
+  if FSession.SessionState <> session_Authorized then
     raise ESshError.CreateRes(@Err_SessionAuth);
-  
+
   FCancelled := False;
   Channel := libssh2_channel_open_session(FSession.Addr);
   if Channel = nil then
     CheckLibSsh2Result(libssh2_session_last_errno(FSession.Addr), FSession,
-     'libssh2_channel_open_session');
+      'libssh2_channel_open_session');
 
   try
     CheckLibSsh2Result(libssh2_channel_exec(Channel,
@@ -1071,12 +1089,13 @@ begin
     // Stop waiting if cancelled
     TimeVal.tv_sec := 1;  // check for cancel every one second
     TimeVal.tv_usec := 0;
-    Repeat
+    repeat
       FD_ZERO(ReadFds);
       _FD_SET(FSession.Socket, ReadFds);
       ReturnCode := select(0, @ReadFds, nil, nil, @TimeVal);
-      if ReturnCode < 0 then CheckSocketResult(WSAGetLastError, 'select');
-    Until (ReturnCode > 0) or FCancelled;
+      if ReturnCode < 0 then
+        CheckSocketResult(WSAGetLastError, 'select');
+    until (ReturnCode > 0) or FCancelled;
 
     if not FCancelled then
     begin
@@ -1096,7 +1115,7 @@ begin
     if FCancelled then
       ExitCode := 130 // ^C on Linux
     else
-      Exitcode := libssh2_channel_get_exit_status(Channel);
+      ExitCode := libssh2_channel_get_exit_status(Channel);
   finally
     libssh2_channel_free(Channel);
     FSession.Blocking := True;
@@ -1126,14 +1145,13 @@ begin
   Result := TScp.Create(Session);
 end;
 
-
 function CreateSshExec(Session: ISshSession): ISshExec;
 begin
-    Result := TSshExec.Create(Session);
+  Result := TSshExec.Create(Session);
 end;
 
 
 {$endregion}
 
-
 end.
+

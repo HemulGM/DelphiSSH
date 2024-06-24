@@ -17,6 +17,8 @@ uses
   WinApi.Windows,
   libssh2;
 
+{$WARN SYMBOL_PLATFORM OFF}
+
 {+// Copyright (c) 2004-2006, Sara Golemon <sarag@libssh2.org> }
 {-* All rights reserved. }
 {-* }
